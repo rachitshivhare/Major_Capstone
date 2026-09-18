@@ -1,0 +1,34 @@
+{
+    "employee_id": "EMPLOYEE_TOO_LONG_001",
+    "first_name": "Arjun",
+    "last_name": "Sharma",
+    "email": "arjun.sharma1@tc.com",
+    "phone_number": "9876500000",
+    "hire_date": "2019-01-01",
+    "department": "Engineering",
+    "job_title": "Senior Backend Engineer",
+    "salary": "650000",
+    "currency": "INR",
+    "employment_status": "Full-time",
+    "manager_id": "M000001",
+    "is_active": true,
+    "skills": [
+        "Java",
+        "Spring Boot",
+        "PostgreSQL",
+        "Docker"
+    ],
+    "address": {
+        "street": "100, Tech Park Avenue, Sector 10",
+        "city": "Bengaluru",
+        "state": "Karnataka",
+        "postal_code": "560100",
+        "country": "India"
+    },
+    "emergency_contact": {
+        "name": "Karan Sharma",
+        "relationship": "Spouse",
+        "phone": "9986500000",
+        "email": "emergency1@example.com"
+    }
+}
