@@ -63,12 +63,8 @@ def verify_record_count(control_file, execution_id):
     if not execution_id:
         raise AirflowException("executionId is missing in dag_run.conf")
 
-    # step 1: what the Beam pipeline says it wrote
     expected = read_control_file_count(control_file)
 
-    # step 2: what is really in the database.
-    # INGESTION_DB_* are already in the container environment
-    # (docker-compose copies them from the .env file).
     db_url = os.environ.get("INGESTION_DB_URL", "").replace("jdbc:", "", 1)  # allow jdbc:
     if not db_url:
         raise AirflowException(
@@ -88,7 +84,6 @@ def verify_record_count(control_file, execution_id):
             {"id": execution_id},
         ).scalar()
 
-    # step 3: both numbers must be equal
     if expected != actual:
         raise AirflowException(
             f"Record count mismatch for executionId '{execution_id}': "
