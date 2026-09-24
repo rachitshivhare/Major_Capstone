@@ -89,6 +89,9 @@ public class RecordValidationFn extends DoFn<EmployeeRecord, EmployeeRecord> {
         if (digits.startsWith("91") && digits.length() == 12) {
             return digits.substring(2);
         }
+        if (digits.startsWith("1") && digits.length() == 11) {
+            return digits.substring(1);
+        }
         return digits;
     }
 

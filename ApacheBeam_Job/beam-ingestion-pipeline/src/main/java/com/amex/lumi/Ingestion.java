@@ -3,8 +3,6 @@ package com.amex.lumi;
 import com.amex.lumi.Model.EmployeeRecord;
 import com.amex.lumi.Transforms.CleanseNullFn;
 import com.amex.lumi.Transforms.EncodeFn;
-import com.amex.lumi.Transforms.RecordCountValidationFn;
-import com.amex.lumi.Utils.ControlFileUtils;
 import com.amex.lumi.Utils.DatabaseWriter;
 import com.amex.lumi.Utils.InputFileUtils;
 import com.amex.lumi.Utils.InputParser;
@@ -13,16 +11,17 @@ import org.apache.beam.runners.direct.DirectRunner;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.TextIO;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
-import org.apache.beam.sdk.transforms.Count;
 import org.apache.beam.sdk.transforms.Flatten;
 import org.apache.beam.sdk.transforms.ParDo;
-import org.apache.beam.sdk.transforms.Wait;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionList;
 import org.apache.beam.sdk.values.PCollectionTuple;
 import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.TupleTagList;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 public class Ingestion {
@@ -57,19 +56,11 @@ public class Ingestion {
             .apply("CleanseValidatedRecords", ParDo.of(new CleanseNullFn()))
                 .apply("EncodeSensitiveFields", ParDo.of(new EncodeFn()));
 
-        PCollection<EmployeeRecord> recordsToWrite = encodedRecords;
-        Long expectedRecordCount = ControlFileUtils.readExpectedRecordCount(options.getControlFile());
-        if (expectedRecordCount != null) {
-            PCollection<Void> countValidation = encodedRecords
-                    .apply("CountValidRecords", Count.globally())
-                    .apply("ValidateRecordCount", ParDo.of(new RecordCountValidationFn(expectedRecordCount)));
-            recordsToWrite = encodedRecords.apply("AwaitRecordCountValidation", Wait.on(countValidation));
-        }
-
-        DatabaseWriter.write(recordsToWrite);
+        DatabaseWriter.write(encodedRecords);
 
         PCollectionList<String> allErrors = PCollectionList.of(parsed.get(ERROR_RECORDS))
                 .and(validated.get(ERROR_RECORDS));
+        createErrorLogParent(options.getErrorLogPath());
         allErrors.apply("FlattenErrors", Flatten.pCollections())
             .apply("WriteErrorLogs", TextIO.write()
                 .to(options.getErrorLogPath())
@@ -79,4 +70,22 @@ public class Ingestion {
         pipeline.run().waitUntilFinish();
     }
 
+    private static void createErrorLogParent(String errorLogPath) {
+        if (errorLogPath == null || errorLogPath.isBlank()) {
+            throw new IllegalArgumentException("errorLogPath must be provided");
+        }
+        Path output = Path.of(errorLogPath).toAbsolutePath();
+        Path parent = output.getParent();
+        if (parent == null) {
+            return;
+        }
+        try {
+            Files.createDirectories(parent);
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("Unable to create error log directory: " + parent, exception);
+        }
+    }
+
 }
+
+

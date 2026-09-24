@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+from pathlib import Path
 from datetime import datetime
 
 from airflow import DAG
@@ -57,8 +58,29 @@ def read_control_file_count(control_file):
     raise AirflowException(f"recordCount not found in control file: {control_file}")
 
 
-def verify_record_count(control_file, execution_id):
-    """Check: recordCount in the control file == COUNT(*) in the database."""
+def count_error_records(error_log_path):
+    """Count records in the sharded error output written by Beam TextIO."""
+    error_log_path = (error_log_path or "").strip()
+    if not error_log_path:
+        raise AirflowException("errorLogPath is missing in dag_run.conf")
+
+    output_path = Path(error_log_path)
+    if output_path.is_file():
+        error_files = [output_path]
+    else:
+        # TextIO.write().to(prefix).withSuffix('.txt') creates prefix-00000-of-00001.txt.
+        error_files = sorted(output_path.parent.glob(output_path.name + "-*-of-*.txt"))
+
+    invalid_count = 0
+    for error_file in error_files:
+        with error_file.open(encoding="utf-8") as stream:
+            invalid_count += sum(1 for _ in stream)
+    logger.info("Invalid records: %d (error files: %s)", invalid_count, error_files or "none")
+    return invalid_count
+
+
+def verify_record_count(control_file, execution_id, error_log_path):
+    """Check total input records == valid database records + invalid error records."""
     execution_id = (execution_id or "").strip()
     if not execution_id:
         raise AirflowException("executionId is missing in dag_run.conf")
@@ -84,12 +106,20 @@ def verify_record_count(control_file, execution_id):
             {"id": execution_id},
         ).scalar()
 
-    if expected != actual:
+    invalid = count_error_records(error_log_path)
+    if expected != actual + invalid:
         raise AirflowException(
             f"Record count mismatch for executionId '{execution_id}': "
-            f"control file says {expected}, database has {actual}"
+            f"total={expected}, valid={actual}, invalid={invalid}, "
+            f"valid+invalid={actual + invalid}"
         )
-    logger.info("Record count OK for '%s': %d == %d", execution_id, expected, actual)
+    logger.info(
+        "Record count OK for '%s': total=%d, valid=%d, invalid=%d",
+        execution_id,
+        expected,
+        actual,
+        invalid,
+    )
 
 
 default_args = {
@@ -139,7 +169,10 @@ with DAG(
         op_kwargs={
             "control_file": "{{ (dag_run.conf or {}).get('controlFile', '') }}",
             "execution_id": "{{ (dag_run.conf or {}).get('executionId', '') }}",
+            "error_log_path": "{{ (dag_run.conf or {}).get('errorLogPath', '') }}",
         },
     )
 
     validate_input_file_task >> run_beam_ingestion >> verify_record_count_task
+
+

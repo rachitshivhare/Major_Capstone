@@ -49,7 +49,8 @@ public class AirflowTriggerService {
             @Value("${airflow.username}") String airflowUsername,
             @Value("${airflow.password}") String airflowPassword,
             @Value("${airflow.dag-id:pipeline-trigger}") String dagId,
-            @Value("${airflow.default-error-log-path:/opt/airflow/errors}") String defaultErrorLogPath, SparkJobService sparkJobService) {
+            @Value("${airflow.default-error-log-path:/opt/airflow/errors}") String defaultErrorLogPath, 
+            SparkJobService sparkJobService) {
         this.restTemplate = restTemplate;
         this.airflowApiUrl = airflowApiUrl;
         this.airflowUsername = airflowUsername;
@@ -71,6 +72,9 @@ public class AirflowTriggerService {
         File file = new File(request.inputFile());
         if (!file.exists()) {
             throw new FileNotFoundException("Input file not found at: " + request.inputFile());
+        }
+        if (file.isFile() && file.length() == 0) {
+            throw new IllegalArgumentException("Input file is empty: " + request.inputFile());
         }
 
         String airflowPath = request.inputFile();
